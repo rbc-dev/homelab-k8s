@@ -1,0 +1,59 @@
+# =============================================================================
+# KUSTOMIZATION
+# =============================================================================
+# Kustomize is built into kubectl (kubectl apply -k) and into ArgoCD natively.
+# It lets you compose Kubernetes manifests without templating — you reference
+# plain YAML files and layer changes (patches, name prefixes, labels, etc.)
+# on top.
+#
+# This file is the entry point. When ArgoCD or kubectl -k points at this
+# directory, it reads this file to know which resources to include.
+#
+# KEY KUSTOMIZE CONCEPTS:
+#   resources    — the base YAML files to include
+#   namespace    — sets the namespace on ALL resources that don't already have one
+#   commonLabels — adds labels to ALL resources (useful for selecting everything)
+#   patches      — inline or file-based changes layered on top of resources
+#   configMapGenerator / secretGenerator — create ConfigMaps/Secrets from files
+#
+# WHY KUSTOMIZE OVER HELM FOR LEARNING?
+#   Helm uses Go templates which obscure the actual Kubernetes YAML.
+#   Kustomize keeps your manifests as plain, readable YAML — you always know
+#   exactly what will be applied to the cluster.
+# =============================================================================
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# ---------------------------------------------------------------------------
+# resources: list every manifest file that belongs to this app.
+# Kustomize merges them into a single stream when applying.
+# Order doesn't matter — Kubernetes handles dependency ordering itself
+# (though Namespace must exist before resources in it, which ArgoCD handles
+# via syncOptions: CreateNamespace=true, or by including it here).
+# ---------------------------------------------------------------------------
+resources:
+  - namespace.yaml
+  - deployment.yaml
+  - service.yaml
+  - ingress.yaml
+
+# ---------------------------------------------------------------------------
+# commonLabels: these labels are added to metadata.labels AND to selector
+# fields on Deployments/Services. Be careful — adding a new commonLabel to
+# an existing Deployment requires deleting and recreating it because
+# spec.selector is immutable after creation.
+# Omit this if you'd rather manage labels per-file (as we do above).
+# ---------------------------------------------------------------------------
+# commonLabels:
+#   app.kubernetes.io/part-of: homelab
+
+# ---------------------------------------------------------------------------
+# images: override container image tags without editing deployment.yaml.
+# This is the Kustomize way to do image bumps — the base manifest has a
+# default tag, and you override it here or in an overlay.
+# Example: pin to a specific version:
+# images:
+#   - name: lscr.io/linuxserver/qbittorrent
+#     newTag: "4.6.5"
+# ---------------------------------------------------------------------------

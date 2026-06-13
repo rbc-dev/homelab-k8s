@@ -1,0 +1,15 @@
+# qbittorrent lives in the shared 'media' namespace so it can mount the
+# 'media' PVC defined in init/storage/persistent-volume-claims.yaml.
+#
+# PVCs are namespace-scoped — a pod can only mount a PVC in its own namespace.
+# All media apps (qbittorrent, Sonarr, Radarr, Plex...) share this namespace
+# for exactly this reason.
+#
+# NOTE: This namespace is also created by init/storage/namespace.yaml.
+# ArgoCD's CreateNamespace=true syncOption means this is safe to include here
+# too — it's idempotent. But the storage init must be applied first so the
+# PVCs exist before the Deployment tries to mount them.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: media

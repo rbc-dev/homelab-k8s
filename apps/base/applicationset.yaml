@@ -1,0 +1,79 @@
+# =============================================================================
+# APPLICATIONSET
+# =============================================================================
+# An ApplicationSet is a controller that generates ArgoCD Application objects
+# automatically based on a generator — in this case, a Git directory generator.
+#
+# HOW IT WORKS:
+#   The Git generator scans apps/base/ in this repo and finds every directory
+#   that contains a kustomization.yaml. For each one it finds, it generates
+#   a full ArgoCD Application object using the template below.
+#
+# ADDING A NEW APP:
+#   1. Create apps/base/<appname>/ with your manifests + kustomization.yaml
+#   2. Commit and merge to dev
+#   3. ArgoCD detects the new directory and generates an Application for it
+#      automatically — no other files to create or apply manually
+#
+# BOOTSTRAP:
+#   Apply this file once manually, then it self-manages:
+#     kubectl apply -f apps/cluster/applicationset.yaml
+# =============================================================================
+
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: homelab-apps
+  namespace: argocd
+spec:
+  # ---------------------------------------------------------------------------
+  # generators: defines how Application objects are generated.
+  # The Git generator queries the repo and produces one set of parameters
+  # per matching directory. Those parameters are substituted into the template.
+  # ---------------------------------------------------------------------------
+  generators:
+    - git:
+        repoURL: git@github.com:rbc-dev/homelab-k8s.git   # <-- update
+        revision: dev
+
+        # directories: scan for subdirectories matching this pattern.
+        # Each directory that has a kustomization.yaml becomes one Application.
+        # The '*' matches any single directory name under apps/base/.
+        directories:
+          - path: apps/base/*
+
+  # ---------------------------------------------------------------------------
+  # template: the Application object to generate for each matched directory.
+  # {{path.basename}} is replaced with the directory name (e.g. "qbittorrent").
+  # ---------------------------------------------------------------------------
+  template:
+    metadata:
+      # Name the Application after the directory — qbittorrent, emby, sonarr etc.
+      name: "{{path.basename}}"
+      namespace: argocd
+      finalizers:
+        - resources-finalizer.argocd.argoproj.io
+
+    spec:
+      project: default
+
+      source:
+        repoURL: git@github.com:rbc-dev/homelab-k8s.git   # <-- update
+        targetRevision: dev
+        # {{path}} is the full relative path — e.g. apps/base/qbittorrent
+        path: "{{path}}"
+
+      destination:
+        server: https://kubernetes.default.svc
+        # Each app's manifests declare their own namespace explicitly (media, etc.).
+        # This is a fallback for any resource that doesn't — set to default
+        # so nothing lands somewhere unexpected.
+        namespace: default
+
+      syncPolicy:
+        automated:
+          prune: true       # delete resources removed from git
+          selfHeal: true    # revert manual cluster changes back to git state
+        syncOptions:
+          - CreateNamespace=true
+          - ServerSideApply=true
