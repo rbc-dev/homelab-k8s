@@ -31,8 +31,6 @@ spec:
           imagePullPolicy: IfNotPresent
 
           env:
-            - name: TZ
-              value: "America/New_York"
             - name: PUID
               value: "996"
             - name: PGID
@@ -63,11 +61,11 @@ spec:
             # emby needs the whole tree so downloaded files land in the
             # right place for Sonarr/Radarr to hardlink from.
             - name: media
-              mountPath: //mnt/share1
+              mountPath: /mnt/share1
               subPath: videos/movies
             
             - name: media
-              mountPath: //mnt/share2
+              mountPath: /mnt/share2
               subPath: videos/tv
 
           livenessProbe:
