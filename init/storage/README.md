@@ -98,7 +98,7 @@ env:
 ### Adding a new app
 
 ```bash
-# On tars: create the config subdirectory with correct ownership
+# On tars: create the config subdirectory with correct ownership not compulsory unless issues show up
 sudo mkdir -p /data/config/<appname>
 sudo chown 1002:1002 /data/config/<appname>
 sudo chmod 775 /data/config/<appname>

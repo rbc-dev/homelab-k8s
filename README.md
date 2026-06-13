@@ -1,91 +1,187 @@
 # homelab-k8s
 
-GitOps repo for a two-node MicroK8s cluster.
+GitOps repo for a two-node MicroK8s cluster running at `rbcdev.site`.
+
+## Cluster nodes
 
 | Node | Role | Taint |
 |------|------|-------|
-| case | Control-plane + core apps (ArgoCD, cert-manager) | `function=centralcommand:PreferNoSchedule` |
-| tars | Worker — application workloads | none |
+| case | Control-plane — ArgoCD, cert-manager, HAProxy, Reflector | `function=centralcommand:PreferNoSchedule` |
+| tars | Worker — all application workloads | none |
 
 ---
 
-## Bootstrap order
+## How it works
 
-### 1. ArgoCD (on case)
-
-```bash
-kubectl apply -k init/argocd/
+```
+Git push → dev branch
+      │
+      ▼
+ArgoCD ApplicationSet  (apps/base/applicationset.yaml)
+      │  scans apps/base/*/kustomization.yaml
+      │  generates one Application per directory
+      ▼
+Kustomize build + apply to cluster
+      │
+      ▼
+Pods scheduled on tars
+      │
+      ▼
+HAProxy Ingress  ←  MetalLB IP 192.168.0.108
+      │
+      ├── qbittorrent.rbcdev.site
+      └── emby.rbcdev.site
 ```
 
-Wait for all pods to be Running, then get the admin password:
-
-```bash
-kubectl -n argocd get secret argocd-initial-admin-secret \
-  -o jsonpath="{.data.password}" | base64 -d && echo
-```
-
-### 2. cert-manager (on case)
-
-```bash
-kubectl apply -k init/cert-manager/
-```
-
-### 3. Register this repo in ArgoCD
-
-Either via the UI or:
-
-```bash
-argocd repo add https://github.com/YOUR_USERNAME/homelab-k8s.git
-```
-
-### 4. HAProxy Ingress Controller (on case)
-
-```bash
-kubectl apply -k init/haproxy/
-```
-
-### 5. Reflector (on case)
-
-```bash
-kubectl apply --server-side -k init/reflector/
-```
-
-### 6. Deploy apps
-
-```bash
-kubectl apply -f apps/cluster/
-```
-
-ArgoCD will pick up everything in `apps/cluster/` and sync it.
+TLS uses a single wildcard cert (`*.rbcdev.site`) issued by Let's Encrypt via Cloudflare DNS-01. Reflector copies the cert Secret into every namespace that needs it.
 
 ---
 
-## Directory layout
+## Repository layout
 
 ```
 homelab-k8s/
-├── init/                        # Manually bootstrapped once (kubectl apply -k)
-│   ├── argocd/                  # ArgoCD install, pinned to 'case' node
-│   └── cert-manager/            # cert-manager install, pinned to 'case' node
+├── init/                            # Applied once manually — never touched by ArgoCD
+│   ├── storage/                     # StorageClass, PVs, PVCs, media namespace
+│   ├── argocd/                      # ArgoCD install + config patches
+│   ├── cert-manager/                # cert-manager + ClusterIssuer + wildcard cert
+│   ├── haproxy/                     # HAProxy Ingress Controller + MetalLB service
+│   └── reflector/                   # Copies TLS Secret across namespaces
 └── apps/
-    ├── base/                    # Plain Kubernetes manifests + kustomization.yaml
-    │   └── qbittorrent/
-    │       ├── namespace.yaml   # Namespace
-    │       ├── pvc.yaml         # PersistentVolumeClaims (config + downloads)
-    │       ├── deployment.yaml  # Deployment (runs on 'tars')
-    │       ├── service.yaml     # ClusterIP (web UI) + NodePort (BitTorrent)
-    │       └── kustomization.yaml
-    └── cluster/                 # ArgoCD Application CRDs — one per app
-        └── qbittorrent.yaml
+    └── base/                        # One subdirectory per app
+        ├── applicationset.yaml      # ArgoCD ApplicationSet — bootstrapped once manually
+        ├── qbittorrent/
+        │   ├── kustomization.yaml
+        │   ├── namespace.yaml
+        │   ├── deployment.yaml
+        │   ├── service.yaml
+        │   └── ingress.yaml
+        └── emby/
+            ├── kustomization.yaml
+            ├── deployment.yaml
+            ├── service.yaml
+            └── ingress.yaml
 ```
 
-All manifests are heavily commented to explain every field — good for learning
-what each resource does and why.
+---
 
-### Adding a new app
+## init/ — what each piece does
 
-1. Create `apps/base/<appname>/` with plain Kubernetes YAML files + a `kustomization.yaml`
-   that lists them under `resources:`.
-2. Create `apps/cluster/<appname>.yaml` as an ArgoCD `Application` pointing at
-   `apps/base/<appname>`.
-3. Commit and push — ArgoCD auto-syncs within ~3 minutes (default poll interval).
+| Directory | Contents |
+|-----------|----------|
+| `init/storage/` | `local-storage` StorageClass · `pv-config` → `/data/config` on tars · `pv-media` → `/data/media` on tars · `config` and `media` PVCs in the `media` namespace |
+| `init/argocd/` | ArgoCD upstream manifest · insecure mode (TLS at HAProxy) · Ingress health check fix · Ingress for `argocd.rbcdev.site` |
+| `init/cert-manager/` | cert-manager · `letsencrypt-prod` ClusterIssuer (Cloudflare DNS-01) · wildcard cert `*.rbcdev.site` with Reflector annotations |
+| `init/haproxy/` | HAProxy Ingress Controller pinned to `case` · Service patched to LoadBalancer · MetalLB IP `192.168.0.105` · IngressClass `haproxy` (default) |
+| `init/reflector/` | Emberstack Reflector pinned to `case` · syncs `wildcard-yourdomain-tls` into `media`, `argocd`, `haproxy-controller` |
+
+---
+
+## Storage layout on tars
+
+Two PVs, two PVCs. All apps mount the same PVCs and use `subPath` to scope access to their own directory.
+
+```
+/data
+├── config/              ← pv-config  /  PVC: config  (in media namespace)
+│   ├── qbittorrent/         subPath: qbittorrent
+│   └── emby/                subPath: emby
+└── media/               ← pv-media   /  PVC: media   (in media namespace)
+    ├── images/
+    ├── music/
+    └── videos/
+        ├── movies/          subPath: videos/movies
+        └── tv/              subPath: videos/tv
+```
+
+All containers run with `PGID=1002` (group `mediacenter`). The setgid bit on every directory ensures files created by any app are readable and writable by all other apps.
+
+---
+
+## Bootstrap — run once on a new cluster
+
+```bash
+# 0. Prepare tars filesystem
+ssh tars
+sudo groupadd -g 1002 mediacenter
+sudo mkdir -p /data/config \
+              /data/media/images \
+              /data/media/music \
+              /data/media/videos/movies \
+              /data/media/videos/tv
+sudo chown -R {user}:1002 /data
+sudo chmod -R 775 /data
+sudo find /data -type d -exec chmod g+s {} +
+exit
+
+# 1. Storage
+kubectl apply -k init/storage/
+
+# 2. Reflector (must exist before cert-manager writes the wildcard Secret)
+kubectl apply --server-side -k init/reflector/
+
+# 3. ArgoCD
+kubectl apply --server-side --force-conflicts -k init/argocd/
+
+# 4. Cloudflare token (before cert-manager requests the cert)
+kubectl create secret generic cloudflare-api-token \
+  --from-literal=api-token=<YOUR_CLOUDFLARE_TOKEN> \
+  --namespace cert-manager
+
+# 5. cert-manager
+kubectl apply --server-side -k init/cert-manager/
+kubectl rollout status deployment/cert-manager -n cert-manager
+
+# 6. HAProxy
+kubectl apply --server-side -k init/haproxy/
+
+# 7. Bootstrap ArgoCD ApplicationSet — the only manual app apply you ever do
+kubectl apply -f apps/base/applicationset.yaml
+```
+
+After step 7, ArgoCD owns everything in `apps/base/`. Merge to `dev` = deploy.
+
+---
+
+## Adding a new app
+
+```bash
+# 1. If the app needs its own namespace, add it to the reflector annotations
+#    in init/cert-manager/wildcard-certificate.yaml then re-apply:
+kubectl apply -f init/cert-manager/wildcard-certificate.yaml
+
+# 2. Create the app manifests
+mkdir apps/base/<appname>
+# deployment.yaml  — nodeSelector: tars, PGID: 1002, subPath for volumes
+# service.yaml     — ClusterIP pointing at the app port
+# ingress.yaml     — host: <appname>.rbcdev.site, secretName: wildcard-yourdomain-tls
+# kustomization.yaml — lists all of the above under resources:
+
+# 4. Commit and push
+git add apps/base/<appname>
+git commit -m "add <appname>"
+git push origin dev
+# ArgoCD picks it up within ~3 minutes
+```
+
+---
+
+## DNS
+
+```
+*.rbcdev.site  →  192.168.0.108
+```
+
+MetalLB pool: `192.168.0.105 – 192.168.0.111`
+
+---
+
+## TLS
+
+Single wildcard cert covering all subdomains. Renewed automatically 30 days before the 90-day expiry. Every Ingress references the same Secret:
+
+```yaml
+tls:
+  - hosts: [<appname>.rbcdev.site]
+    secretName: wildcard-yourdomain-tls
+```
