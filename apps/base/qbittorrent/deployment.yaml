@@ -34,7 +34,7 @@ spec:
             - name: TZ
               value: "America/New_York"
             - name: PUID
-              value: "1003"
+              value: "1000"
             - name: PGID
               value: "1002"
             - name: WEBUI_PORT
@@ -70,13 +70,13 @@ spec:
             # Media root: full /data/media tree, no subPath.
             # qbittorrent needs the whole tree so downloaded files land in the
             # right place for Sonarr/Radarr to hardlink from.
-            - name: downloads
-              mountPath: /data/media
-              subPath: videos
+            - name: media
+              mountPath: /downloads
+              subPath: videos/movies
             
-            - name: downloadstv
-              mountPath: /data/media
-              subPath: tv
+            - name: media
+              mountPath: /downloadstv
+              subPath: videos/tv
 
           livenessProbe:
             httpGet:
