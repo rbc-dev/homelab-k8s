@@ -34,7 +34,7 @@ spec:
             - name: TZ
               value: "America/New_York"
             - name: PUID
-              value: "1000"
+              value: "1003"
             - name: PGID
               value: "1002"
             - name: WEBUI_PORT
