@@ -1,0 +1,126 @@
+# =============================================================================
+# PERSISTENT VOLUMES (PVs)
+# =============================================================================
+# PVs are cluster-scoped resources representing real storage on a node.
+# We use 'local' volumes — they map directly to directories on 'tars'.
+#
+# LOCAL vs HOSTPATH:
+#   hostPath — no node enforcement. Any pod on any node can claim it.
+#   local     — requires nodeAffinity. The scheduler guarantees pods using
+#               this PV only land on the node where the data actually lives.
+#               Always prefer 'local' for persistent data on bare metal.
+#
+# RECLAIM POLICY — Retain:
+#   When a PVC is deleted the PV and its data are kept. You must manually
+#   release the PV before it can be rebound. Safe default — never lose data
+#   because an app was removed from ArgoCD.
+#
+# DIRECTORY STRUCTURE ON TARS:
+#   /data
+#   ├── config/                  ← pv-config  (one PV, all apps use subPath)
+#   │   ├── qbittorrent/
+#   │   └── <appname>/
+#   └── media/                   ← pv-media   (one PV, all apps use subPath)
+#       ├── images/
+#       ├── music/
+#       └── videos/
+#           ├── movies/
+#           └── tv/
+#
+# BEFORE APPLYING — SSH into tars and create the directories:
+#
+#   sudo mkdir -p /data/config/qbittorrent
+#   sudo mkdir -p /data/media/images
+#   sudo mkdir -p /data/media/music
+#   sudo mkdir -p /data/media/videos/movies
+#   sudo mkdir -p /data/media/videos/tv
+#   sudo chown -R 1000:1000 /data
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# pv-config
+# One PV covering the entire /data/config tree.
+# Each app gets its own subdirectory and accesses it via subPath in its
+# volumeMount — exactly the same pattern as pv-media.
+#
+# Example in a deployment.yaml:
+#   volumes:
+#     - name: config
+#       persistentVolumeClaim:
+#         claimName: config       # the single shared config PVC
+#   containers:
+#     - volumeMounts:
+#         - name: config
+#           mountPath: /config
+#           subPath: qbittorrent  # container only sees /data/config/qbittorrent
+# -----------------------------------------------------------------------------
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv-config
+  labels:
+    type: config
+spec:
+  capacity:
+    storage: 500Mi       # Informational only for local PVs — not enforced by k8s.
+                        # Size to your available disk. Config data is small;
+                        # 10Gi covers dozens of apps comfortably.
+  volumeMode: Filesystem
+  accessModes:
+    - ReadWriteOnce     # All app pods run on 'tars' so one-node RWO is fine.
+                        # Multiple pods on the same node can all mount RWO
+                        # concurrently — the restriction is per-node, not per-pod.
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: local-storage
+  local:
+    path: /data/config  # Root of the config tree. Apps land in subdirectories
+                        # via subPath — the PV itself points at the root.
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values:
+                - tars
+
+# -----------------------------------------------------------------------------
+# pv-media
+# One PV covering the entire /data/media tree.
+# Apps scope their access with subPath:
+#   qbittorrent → subPath: ""            (full tree, downloads go here)
+#   Sonarr      → subPath: videos/tv
+#   Radarr      → subPath: videos/movies
+#   Lidarr      → subPath: music
+#
+# Keeping everything under one PV preserves hardlink capability across the
+# whole media tree. Hardlinks only work within the same filesystem/mount —
+# if downloads and the TV library were on separate PVs they'd be on separate
+# mounts and Sonarr/Radarr would fall back to slow full-file copies.
+# -----------------------------------------------------------------------------
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv-media
+  labels:
+    type: media
+spec:
+  capacity:
+    storage: 600Gi       # Set to your actual available disk on tars.
+  volumeMode: Filesystem
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: local-storage
+  local:
+    path: /data/media
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values:
+                - tars

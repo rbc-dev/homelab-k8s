@@ -1,0 +1,78 @@
+# =============================================================================
+# PERSISTENT VOLUME CLAIMS (PVCs)
+# =============================================================================
+# PVCs are namespace-scoped requests for storage. A pod references a PVC by
+# name; Kubernetes binds it to a matching PV (1:1, exclusive).
+#
+# We have exactly two PVCs — one for config, one for media — mirroring the
+# two PVs. Apps scope their access using subPath in their volumeMount.
+#
+# Both PVCs live in the 'media' namespace because:
+#   - PVCs are namespace-scoped; pods can only mount PVCs in their own namespace
+#   - All apps (qbittorrent, Sonarr, Radarr, Plex...) live in 'media'
+#   - This avoids any cross-namespace storage gymnastics
+#
+# HOW APPS USE THESE:
+#
+#   volumes:
+#     - name: config
+#       persistentVolumeClaim:
+#         claimName: config        # this file
+#     - name: media
+#       persistentVolumeClaim:
+#         claimName: media         # this file
+#
+#   volumeMounts:
+#     - name: config
+#       mountPath: /config
+#       subPath: qbittorrent       # → /data/config/qbittorrent on tars
+#     - name: media
+#       mountPath: /data/media
+#       # no subPath = full tree   # → /data/media on tars
+#     - name: media
+#       mountPath: /tv
+#       subPath: videos/tv         # → /data/media/videos/tv on tars
+# =============================================================================
+
+---
+# config PVC — shared by all apps, scoped per-app via subPath
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: config
+  namespace: media
+  labels:
+    type: config
+spec:
+  storageClassName: local-storage
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 500Mi
+  # Pins this PVC to pv-config specifically via label matching.
+  # Without this selector, any PV with matching storageClass and sufficient
+  # capacity could be bound — undesirable when PVs map to specific disk paths.
+  selector:
+    matchLabels:
+      type: config
+
+---
+# media PVC — shared by all apps, scoped per-app via subPath
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: media
+  namespace: media
+  labels:
+    type: media
+spec:
+  storageClassName: local-storage
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 600Gi
+  selector:
+    matchLabels:
+      type: media

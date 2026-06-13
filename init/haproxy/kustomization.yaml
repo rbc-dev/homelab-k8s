@@ -1,0 +1,57 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ingress-class.yaml
+  # Official HAProxy Ingress Controller install manifest.
+  # This installs the CRDs, RBAC, ServiceAccount, Deployment, and Services.
+  # Pin to a specific version tag in production — 'latest' is used here for
+  # bootstrapping convenience.
+  # Release list: https://github.com/haproxytech/kubernetes-ingress/releases
+  - https://raw.githubusercontent.com/haproxytech/kubernetes-ingress/refs/heads/master/deploy/haproxy-ingress.yaml
+
+namespace: haproxy-controller
+
+patches:
+  # -------------------------------------------------------------------------
+  # Pin the HAProxy controller pod to 'case'.
+  # -------------------------------------------------------------------------
+  - patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: haproxy-kubernetes-ingress
+        namespace: haproxy-controller
+      spec:
+        template:
+          spec:
+            nodeSelector:
+              kubernetes.io/hostname: case
+            tolerations:
+              - key: function
+                operator: Equal
+                value: centralcommand
+                effect: PreferNoSchedule
+    target:
+      kind: Deployment
+      name: haproxy-kubernetes-ingress
+
+  # -------------------------------------------------------------------------
+  # Change the HAProxy Service from NodePort to LoadBalancer and request a
+  # specific IP from the MetalLB pool (192.168.0.105-192.168.0.111).
+  # Pick any unused IP from that range — 192.168.0.105 is used here.
+  # -------------------------------------------------------------------------
+  - patch: |-
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: haproxy-kubernetes-ingress
+        namespace: haproxy-controller
+        annotations:
+          metallb.universe.tf/loadBalancerIPs: "192.168.0.108"
+      spec:
+        type: LoadBalancer
+        externalTrafficPolicy: Local
+    target:
+      kind: Service
+      name: haproxy-kubernetes-ingress

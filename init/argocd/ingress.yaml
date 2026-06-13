@@ -1,0 +1,36 @@
+# =============================================================================
+# ARGOCD INGRESS
+# =============================================================================
+# Routes external HTTPS traffic to the ArgoCD server via HAProxy.
+# TLS is handled by the wildcard cert in init/cert-manager/wildcard-certificate.yaml.
+# HTTP is redirected to HTTPS automatically via the ssl-redirect annotation.
+# =============================================================================
+
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: argocd
+  namespace: argocd
+  annotations:
+    # Redirect all HTTP requests to HTTPS.
+    # HAProxy issues a 301 redirect before the request reaches ArgoCD.
+    haproxy.org/ssl-redirect: "true"
+spec:
+  ingressClassName: haproxy
+
+  tls:
+    - hosts:
+        - argocd.rbcdev.site     # <-- replace with your actual domain
+      secretName: wildcard-yourdomain-tls  # wildcard Secret from init/cert-manager
+
+  rules:
+    - host: argocd.rbcdev.site   # <-- replace with your actual domain
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: argocd-server
+                port:
+                  name: http

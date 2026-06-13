@@ -1,0 +1,30 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  # Reflector watches Secrets/ConfigMaps with reflection annotations and
+  # copies them into the namespaces you specify.
+  # Source: https://github.com/emberstack/kubernetes-reflector
+  # Runs on 'case' alongside the other infrastructure components.
+  - https://github.com/emberstack/kubernetes-reflector/releases/latest/download/reflector.yaml
+
+patches:
+  - patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: reflector
+        namespace: kube-system
+      spec:
+        template:
+          spec:
+            nodeSelector:
+              kubernetes.io/hostname: case
+            tolerations:
+              - key: function
+                operator: Equal
+                value: centralcommand
+                effect: PreferNoSchedule
+    target:
+      kind: Deployment
+      name: reflector

@@ -1,0 +1,85 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  # Direct release asset URL with explicit version tag.
+  # Kustomize cannot follow the /releases/latest/download redirect —
+  # it needs a URL that resolves directly to a file without any HTTP redirects.
+  #
+  # The upstream manifest already includes the cert-manager Namespace so
+  # there is no separate namespace.yaml here — adding one causes the
+  # "already registered id" duplicate error you hit earlier.
+  #
+  # To upgrade: bump the version tag here.
+  # Latest releases: https://github.com/cert-manager/cert-manager/releases
+  - https://github.com/cert-manager/cert-manager/releases/download/v1.16.3/cert-manager.yaml
+  # These depend on cert-manager CRDs being registered first.
+  # If you get "no kind ClusterIssuer/Certificate" on first apply, run:
+  #   kubectl apply --server-side -f https://github.com/cert-manager/cert-manager/releases/download/v1.16.3/cert-manager.yaml
+  #   kubectl rollout status deployment/cert-manager -n cert-manager
+  #   kubectl apply -f init/cert-manager/cluster-issuer.yaml
+  #   kubectl apply -f init/cert-manager/wildcard-certificate.yaml
+  - cloudflare-secret.yaml
+  - cluster-issuer.yaml
+  - wildcard-certificate.yaml
+
+patches:
+  - patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: cert-manager
+        namespace: cert-manager
+      spec:
+        template:
+          spec:
+            nodeSelector:
+              kubernetes.io/hostname: case
+            tolerations:
+              - key: function
+                operator: Equal
+                value: centralcommand
+                effect: PreferNoSchedule
+    target:
+      kind: Deployment
+      name: cert-manager
+
+  - patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: cert-manager-webhook
+        namespace: cert-manager
+      spec:
+        template:
+          spec:
+            nodeSelector:
+              kubernetes.io/hostname: case
+            tolerations:
+              - key: function
+                operator: Equal
+                value: centralcommand
+                effect: PreferNoSchedule
+    target:
+      kind: Deployment
+      name: cert-manager-webhook
+
+  - patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: cert-manager-cainjector
+        namespace: cert-manager
+      spec:
+        template:
+          spec:
+            nodeSelector:
+              kubernetes.io/hostname: case
+            tolerations:
+              - key: function
+                operator: Equal
+                value: centralcommand
+                effect: PreferNoSchedule
+    target:
+      kind: Deployment
+      name: cert-manager-cainjector

@@ -1,0 +1,8 @@
+---
+# Shared namespace for all media applications.
+# qbittorrent, Sonarr, Radarr, Plex, Jellyfin etc. all live here so they
+# can share the 'media' PVC (PVCs cannot be mounted cross-namespace).
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: media

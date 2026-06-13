@@ -1,0 +1,44 @@
+# =============================================================================
+# WILDCARD CERTIFICATE
+# =============================================================================
+# cert-manager issues the cert and stores it in a Secret in the cert-manager
+# namespace. Reflector copies that Secret to every namespace listed in the
+# annotations so HAProxy Ingress resources in those namespaces can use it.
+#
+# TO ADD A NEW NAMESPACE:
+#   Append it to reflector.v1.k8s.emberstack.com/reflection-allowed-namespaces
+#   Reflector will create the copy within seconds. No restart needed.
+# =============================================================================
+
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: wildcard-yourdomain
+  namespace: cert-manager
+spec:
+  secretName: wildcard-yourdomain-tls
+  # Reflector reads them off the Secret to know where to copy it.
+  secretTemplate:
+    annotations:
+      # Allow reflection at all (master switch)
+      reflector.v1.k8s.emberstack.com/reflection-allowed: "true"
+
+      # Comma-separated list of namespaces to copy the Secret into.
+      # Add any new namespace here before deploying an app that needs TLS.
+      reflector.v1.k8s.emberstack.com/reflection-allowed-namespaces: "media,argocd,haproxy-controller"
+
+      # Keep reflected copies in sync when the Secret is renewed.
+      # Without this, copies would go stale after the 90-day cert renewal.
+      reflector.v1.k8s.emberstack.com/reflection-auto-enabled: "true"
+      reflector.v1.k8s.emberstack.com/reflection-auto-namespaces: "media,argocd,haproxy-controller"
+
+  duration: 2160h     # 90 days (Let's Encrypt maximum)
+  renewBefore: 720h   # renew 30 days before expiry
+
+  issuerRef:
+    name: letsencrypt-prod   # switch to letsencrypt-prod once staging works
+    kind: ClusterIssuer
+
+  dnsNames:
+    - "rbcdev.site"      # <-- replace with your actual domain
+    - "*.rbcdev.site"    # <-- wildcard
