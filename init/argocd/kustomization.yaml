@@ -158,6 +158,22 @@ patches:
       apiVersion: v1
       kind: ConfigMap
       metadata:
+        name: argocd-cm
+        namespace: argocd
+      data:
+        resource.customizations.health.networking.k8s.io_Ingress: |
+          hs = {}
+          hs.status = "Healthy"
+          hs.message = "Ingress is healthy"
+          return hs
+    target:
+      kind: ConfigMap
+      name: argocd-cm
+
+  - patch: |-
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
         name: argocd-cmd-params-cm
         namespace: argocd
       data:
