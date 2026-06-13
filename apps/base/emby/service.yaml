@@ -1,0 +1,50 @@
+# =============================================================================
+# SERVICES
+# =============================================================================
+# A Service gives your Pod a stable network endpoint. Pods are ephemeral —
+# they restart with new IP addresses. A Service provides a consistent
+# ClusterIP (internal) or NodePort (external) that always routes to healthy Pods.
+#
+# SERVICE TYPES:
+#   ClusterIP  — only reachable from inside the cluster. Good for internal
+#                communication between services.
+#   NodePort   — exposes the service on a static port on every node's IP.
+#                Reachable from your LAN at <node-ip>:<nodePort>.
+#                NodePort range is 30000–32767 by default.
+#   LoadBalancer — provisions an external load balancer (cloud only, or
+#                  MetalLB on bare metal). Overkill for a homelab without MetalLB.
+#
+# HOW SERVICES FIND PODS:
+#   The 'selector' field must match labels on the target Pods.
+#   Kubernetes automatically updates the list of endpoints (pod IPs) as pods
+#   come and go.
+# =============================================================================
+
+---
+# ClusterIP service for the Web UI.
+# Used internally — if you add an Ingress later, the Ingress controller
+# will forward traffic to this Service.
+apiVersion: v1
+kind: Service
+metadata:
+  name: emby-service
+  namespace: media              # Updated: shared media namespace
+  labels:
+    app.kubernetes.io/name: emby
+spec:
+  # type: ClusterIP is the default. The web UI doesn't need to be directly
+  # reachable from outside the cluster — an Ingress (or port-forward during
+  # development) handles that. Keeping it ClusterIP is cleaner and more secure.
+  type: ClusterIP
+
+  # selector: routes traffic to Pods with these labels.
+  # Must match spec.template.metadata.labels in deployment.yaml.
+  selector:
+    app.kubernetes.io/name: emby
+
+  ports:
+    - name: http
+      port: 80            # the port clients connect to on the Service
+      targetPort: http   # the named port on the Pod (defined in deployment.yaml)
+      protocol: TCP
+

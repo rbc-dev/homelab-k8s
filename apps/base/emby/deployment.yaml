@@ -1,0 +1,99 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: emby
+  namespace: media            # Shared media namespace (same as the PVCs)
+  labels:
+    app.kubernetes.io/name: emby
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: emby
+  # Recreate: kill the old pod before starting the new one.
+  # Required because emby holds an exclusive lock on its config directory.
+  # A RollingUpdate would try to start the new pod while the old one still has
+  # the config mounted, causing the new pod to fail or corrupt state.
+  strategy:
+    type: Recreate
+
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: emby
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: tars
+
+      containers:
+        - name: emby
+          image: emby/embyserver
+          imagePullPolicy: IfNotPresent
+
+          env:
+            - name: TZ
+              value: "America/New_York"
+            - name: PUID
+              value: "996"
+            - name: PGID
+              value: "1002"
+
+          ports:
+            - name: http
+              containerPort: 8096
+              protocol: TCP
+    
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "1000m"
+              memory: "2Gi"
+
+          volumeMounts:
+            # Config: scoped to /data/config/emby via subPath.
+            # The 'config' PVC covers all of /data/config — subPath ensures
+            # this container only sees its own directory, not other apps'.
+            - name: config
+              mountPath: /config
+              subPath: emby
+
+            # Media root: full /data/media tree, no subPath.
+            # emby needs the whole tree so downloaded files land in the
+            # right place for Sonarr/Radarr to hardlink from.
+            - name: media
+              mountPath: //mnt/share1
+              subPath: videos/movies
+            
+            - name: media
+              mountPath: //mnt/share2
+              subPath: videos/tv
+
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            failureThreshold: 3
+
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 15
+
+      volumes:
+        # 'config' PVC covers all of /data/config on tars.
+        # subPath in the volumeMount above scopes each app to its own directory.
+        - name: config
+          persistentVolumeClaim:
+            claimName: config
+
+        # 'media' PVC covers all of /data/media on tars.
+        # subPath in the volumeMount scopes each app to its relevant subtree.
+        - name: media
+          persistentVolumeClaim:
+            claimName: media

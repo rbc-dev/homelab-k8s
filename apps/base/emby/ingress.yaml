@@ -1,0 +1,35 @@
+# =============================================================================
+# INGRESS
+# =============================================================================
+# Routes external HTTPS traffic to the qbittorrent web UI via HAProxy.
+# TLS is handled by the wildcard cert in init/cert-manager/wildcard-certificate.yaml
+# — no cert-manager annotations needed here because the cert is pre-provisioned.
+# HAProxy reads the Secret directly and serves it for any matching host.
+# =============================================================================
+
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: emby
+  namespace: media
+  annotations:
+    haproxy.org/ssl-redirect: "true"
+spec:
+  ingressClassName: haproxy
+
+  tls:
+    - hosts:
+        - emby.rbcdev.site    
+      secretName: wildcard-yourdomain-tls
+
+  rules:
+    - host: emby.rbcdev.site 
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: emby-service
+                port:
+                  name: http
