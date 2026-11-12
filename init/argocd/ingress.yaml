@@ -20,11 +20,11 @@ spec:
 
   tls:
     - hosts:
-        - argocd.rbcdev.site     # <-- replace with your actual domain
+        - argocd.rbcdev.space     # <-- replace with your actual domain
       secretName: wildcard-yourdomain-tls  # wildcard Secret from init/cert-manager
 
   rules:
-    - host: argocd.rbcdev.site   # <-- replace with your actual domain
+    - host: argocd.rbcdev.space   # <-- replace with your actual domain
       http:
         paths:
           - path: /

@@ -40,5 +40,5 @@ spec:
     kind: ClusterIssuer
 
   dnsNames:
-    - "rbcdev.site"      # <-- replace with your actual domain
-    - "*.rbcdev.site"    # <-- wildcard
+    - "rbcdev.space"      # <-- replace with your actual domain
+    - "*.rbcdev.space"    # <-- wildcard

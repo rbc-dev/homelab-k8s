@@ -1,6 +1,6 @@
 # homelab-k8s
 
-GitOps repo for a two-node MicroK8s cluster running at `rbcdev.site`.
+GitOps repo for a two-node MicroK8s cluster running at `rbcdev.space`.
 
 ## Cluster nodes
 
@@ -29,11 +29,11 @@ Pods scheduled on tars
       ▼
 HAProxy Ingress  ←  MetalLB IP 192.168.0.108
       │
-      ├── qbittorrent.rbcdev.site
-      └── emby.rbcdev.site
+      ├── qbittorrent.rbcdev.space
+      └── emby.rbcdev.space
 ```
 
-TLS uses a single wildcard cert (`*.rbcdev.site`) issued by Let's Encrypt via Cloudflare DNS-01. Reflector copies the cert Secret into every namespace that needs it.
+TLS uses a single wildcard cert (`*.rbcdev.space`) issued by Let's Encrypt via Cloudflare DNS-01. Reflector copies the cert Secret into every namespace that needs it.
 
 ---
 
@@ -70,8 +70,8 @@ homelab-k8s/
 | Directory | Contents |
 |-----------|----------|
 | `init/storage/` | `local-storage` StorageClass · `pv-config` → `/data/config` on tars · `pv-media` → `/data/media` on tars · `config` and `media` PVCs in the `media` namespace |
-| `init/argocd/` | ArgoCD upstream manifest · insecure mode (TLS at HAProxy) · Ingress health check fix · Ingress for `argocd.rbcdev.site` |
-| `init/cert-manager/` | cert-manager · `letsencrypt-prod` ClusterIssuer (Cloudflare DNS-01) · wildcard cert `*.rbcdev.site` with Reflector annotations |
+| `init/argocd/` | ArgoCD upstream manifest · insecure mode (TLS at HAProxy) · Ingress health check fix · Ingress for `argocd.rbcdev.space` |
+| `init/cert-manager/` | cert-manager · `letsencrypt-prod` ClusterIssuer (Cloudflare DNS-01) · wildcard cert `*.rbcdev.space` with Reflector annotations |
 | `init/haproxy/` | HAProxy Ingress Controller pinned to `case` · Service patched to LoadBalancer · MetalLB IP `192.168.0.105` · IngressClass `haproxy` (default) |
 | `init/reflector/` | Emberstack Reflector pinned to `case` · syncs `wildcard-yourdomain-tls` into `media`, `argocd`, `haproxy-controller` |
 
@@ -154,7 +154,7 @@ kubectl apply -f init/cert-manager/wildcard-certificate.yaml
 mkdir apps/base/<appname>
 # deployment.yaml  — nodeSelector: tars, PGID: 1002, subPath for volumes
 # service.yaml     — ClusterIP pointing at the app port
-# ingress.yaml     — host: <appname>.rbcdev.site, secretName: wildcard-yourdomain-tls
+# ingress.yaml     — host: <appname>.rbcdev.space, secretName: wildcard-yourdomain-tls
 # kustomization.yaml — lists all of the above under resources:
 
 # 4. Commit and push
@@ -169,7 +169,7 @@ git push origin dev
 ## DNS
 
 ```
-*.rbcdev.site  →  192.168.0.108
+*.rbcdev.space  →  192.168.0.108
 ```
 
 MetalLB pool: `192.168.0.105 – 192.168.0.111`
@@ -182,6 +182,6 @@ Single wildcard cert covering all subdomains. Renewed automatically 30 days befo
 
 ```yaml
 tls:
-  - hosts: [<appname>.rbcdev.site]
+  - hosts: [<appname>.rbcdev.space]
     secretName: wildcard-yourdomain-tls
 ```

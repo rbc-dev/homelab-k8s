@@ -19,11 +19,11 @@ spec:
 
   tls:
     - hosts:
-        - qb.rbcdev.site    
+        - qb.rbcdev.space    
       secretName: wildcard-yourdomain-tls
 
   rules:
-    - host: qb.rbcdev.site 
+    - host: qb.rbcdev.space 
       http:
         paths:
           - path: /

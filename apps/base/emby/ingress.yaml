@@ -19,11 +19,11 @@ spec:
 
   tls:
     - hosts:
-        - emby.rbcdev.site    
+        - emby.rbcdev.space    
       secretName: wildcard-yourdomain-tls
 
   rules:
-    - host: emby.rbcdev.site 
+    - host: emby.rbcdev.space 
       http:
         paths:
           - path: /
